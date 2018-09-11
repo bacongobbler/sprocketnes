@@ -60,8 +60,9 @@ pub fn start_emulator(rom: Rom, scale: Scale) {
     let rom = Box::new(rom);
     println!("Loaded ROM: {}", rom.header);
 
-    let (mut gfx, sdl) = Gfx::new(scale);
-    let audio_buffer = audio::open();
+    let sdl_context = sdl2::init().unwrap();
+    let (mut gfx, sdl) = Gfx::new(scale, sdl_context);
+    let audio_buffer = audio::open(sdl_context);
 
     let mapper: Box<Mapper+Send> = mapper::create_mapper(rom);
     let mapper = Rc::new(RefCell::new(mapper));

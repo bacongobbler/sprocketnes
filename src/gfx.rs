@@ -4,8 +4,8 @@
 
 use sdl2;
 use sdl2::pixels::PixelFormatEnum::BGR24;
-use sdl2::render::{Renderer, Texture, TextureAccess};
-use sdl2::{Sdl};
+use sdl2::render::{Canvas, Texture, TextureAccess, TextureCreator};
+use sdl2::video;
 
 
 /// Emulated screen width in pixels
@@ -279,39 +279,31 @@ impl Scale {
     }
 }
 
-pub struct Gfx<'a> {
-    pub renderer: Box<Renderer<'a>>,
-    pub texture: Box<Texture<'a>>,
+pub struct Gfx {
+    pub canvas: Box<Canvas<video::Window>>,
     pub scale: Scale,
     pub status_line: StatusLine,
 }
 
-impl<'a> Gfx<'a> {
-    pub fn new(scale: Scale) -> (Gfx<'a>, Sdl) {
-        let sdl_context = sdl2::init().unwrap();
+impl<'a> Gfx {
+    pub fn new(scale: Scale, sdl_context: sdl2::Sdl) -> (Gfx, sdl2::Sdl) {
         let sdl_video = sdl_context.video().unwrap();
 
         let window = sdl_video.window("sprocketnes",
                                       (SCREEN_WIDTH as usize * scale.factor()) as u32,
                                       (SCREEN_HEIGHT as usize * scale.factor()) as u32)
                                       .position_centered()
-                                      .opengl()
                                       .resizable()
                                       .build()
                                       .unwrap();
 
-        window.renderer().accelerated().present_vsync().build().unwrap();
-        let texture = renderer.create_texture(BGR24,
-                                              TextureAccess::Streaming,
-                                              (SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32))
-                                              .unwrap();
+        let canvas = window.into_canvas().present_vsync().build().unwrap();
 
         (Gfx {
-            renderer: Box::new(renderer),
-            texture: Box::new(texture),
+            canvas: Box::new(canvas),
             scale: scale,
             status_line: StatusLine::new(),
-        }, sdl_video)
+        }, sdl_context)
     }
 
     pub fn tick(&mut self) {
@@ -320,15 +312,17 @@ impl<'a> Gfx<'a> {
 
     /// Copies the overlay onto the given screen and displays it to the SDL window.
     pub fn composite(&mut self, ppu_screen: &mut [u8; SCREEN_SIZE]) {
-        self.status_line.render(ppu_screen);
-        self.blit(ppu_screen);
-        self.renderer.clear();
-        self.renderer.copy(&self.texture, None, None);
-        self.renderer.present();
-    }
+        let texture_creator = self.canvas.texture_creator();
+        let mut texture = texture_creator.create_texture(BGR24,
+                                                         TextureAccess::Streaming,
+                                                         SCREEN_WIDTH as u32,
+                                                         SCREEN_HEIGHT as u32)
+                                                         .unwrap();
 
-    /// Updates the window texture with new screen data.
-    fn blit(&mut self, ppu_screen: &[u8; SCREEN_SIZE]) {
-        self.texture.update(None, ppu_screen, SCREEN_WIDTH * 3).unwrap()
+        self.status_line.render(ppu_screen);
+        texture.update(None, ppu_screen, SCREEN_WIDTH * 3).unwrap();
+        self.canvas.clear();
+        self.canvas.copy(&texture, None, None);
+        self.canvas.present();
     }
 }

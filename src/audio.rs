@@ -63,8 +63,7 @@ impl AudioCallback for NesAudioCallback {
 
 /// Audio initialization. If successful, returns a pointer to an allocated `OutputBuffer` that can
 /// be filled with raw audio data.
-pub fn open() -> Option<*mut OutputBuffer> {
-    let sdl_context = sdl2::init().unwrap();
+pub fn open(sdl_context: sdl2::Sdl) -> Option<*mut OutputBuffer> {
     let sdl_audio = sdl_context.audio().unwrap();
 
     let output_buffer = Box::new(OutputBuffer {
@@ -91,9 +90,11 @@ pub fn open() -> Option<*mut OutputBuffer> {
         spec: spec,
     }).unwrap();
 
-    device.resume();
-    G_AUDIO_DEVICE = Some(mem::transmute(Box::new(device)));
-    return Some(output_buffer_ptr);
+    unsafe {
+        device.resume();
+        G_AUDIO_DEVICE = Some(mem::transmute(Box::new(device)));
+        return Some(output_buffer_ptr);
+    }
 }
 
 //
