@@ -6,7 +6,6 @@ use mem::Mem;
 
 use sdl2::Sdl;
 use sdl2::event::Event;
-use sdl2::event::Event::*;
 use sdl2::keyboard::Keycode;
 
 use std::ops::Deref;
