@@ -121,8 +121,10 @@ impl Input {
     }
 
     pub fn check_input(&mut self) -> InputResult {
-        while let Some(ev) = self.sdl.event_pump().poll_event() {
-            match ev {
+        let mut event_pump = self.sdl.event_pump().unwrap();
+        for event in event_pump.poll_iter() {
+            use sdl2::event::Event;
+            match event {
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => return InputResult::Quit,
                 Event::KeyDown { keycode: Some(Keycode::S), .. } => return InputResult::SaveState,
                 Event::KeyDown { keycode: Some(Keycode::L), .. } => return InputResult::LoadState,

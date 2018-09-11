@@ -2,9 +2,10 @@
 // Author: Patrick Walton
 //
 
+use sdl2;
 use sdl2::pixels::PixelFormatEnum::BGR24;
 use sdl2::render::{Renderer, Texture, TextureAccess};
-use sdl2::{InitBuilder, Sdl};
+use sdl2::{Sdl};
 
 
 /// Emulated screen width in pixels
@@ -280,23 +281,26 @@ impl Scale {
 
 pub struct Gfx<'a> {
     pub renderer: Box<Renderer<'a>>,
-    pub texture: Box<Texture>,
+    pub texture: Box<Texture<'a>>,
     pub scale: Scale,
     pub status_line: StatusLine,
 }
 
 impl<'a> Gfx<'a> {
     pub fn new(scale: Scale) -> (Gfx<'a>, Sdl) {
-        // FIXME: Handle SDL better
+        let sdl_context = sdl2::init().unwrap();
+        let sdl_video = sdl_context.video().unwrap();
 
-        let sdl = InitBuilder::new().video().audio().timer().events().unwrap();
+        let window = sdl_video.window("sprocketnes",
+                                      (SCREEN_WIDTH as usize * scale.factor()) as u32,
+                                      (SCREEN_HEIGHT as usize * scale.factor()) as u32)
+                                      .position_centered()
+                                      .opengl()
+                                      .resizable()
+                                      .build()
+                                      .unwrap();
 
-        let mut window_builder = sdl.window("sprocketnes",
-                                            (SCREEN_WIDTH as usize * scale.factor()) as u32,
-                                            (SCREEN_HEIGHT as usize * scale.factor()) as u32);
-        let window = window_builder.position_centered().build().unwrap();
-
-        let renderer = window.renderer().accelerated().present_vsync().build().unwrap();
+        window.renderer().accelerated().present_vsync().build().unwrap();
         let texture = renderer.create_texture(BGR24,
                                               TextureAccess::Streaming,
                                               (SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32))
@@ -307,7 +311,7 @@ impl<'a> Gfx<'a> {
             texture: Box::new(texture),
             scale: scale,
             status_line: StatusLine::new(),
-        }, sdl)
+        }, sdl_video)
     }
 
     pub fn tick(&mut self) {

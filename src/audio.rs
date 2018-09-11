@@ -7,7 +7,8 @@
 // TODO: This module is very unsafe. Adding a reader-writer audio lock to SDL would help make it
 // safe.
 
-use sdl2::audio::{AudioDevice, AudioCallback, AudioSpecDesired, AudioDeviceLockGuard};
+use sdl2;
+use sdl2::audio::{AudioDevice, AudioCallback, AudioSpec, AudioSpecDesired, AudioDeviceLockGuard};
 use std::cmp;
 use std::mem;
 use std::slice::from_raw_parts_mut;
@@ -33,35 +34,39 @@ pub struct OutputBuffer {
     pub play_offset: usize,
 }
 
-pub struct NesAudioCallback;
+pub struct NesAudioCallback {
+    samples: Vec<f32>,
+    spec: AudioSpec
+}
 
 impl AudioCallback for NesAudioCallback {
-    type Channel = i16;
-
-    fn callback(&mut self, buf: &mut [Self::Channel]) {
-        unsafe {
-            let samples: &mut [u8] = from_raw_parts_mut(&mut buf[0] as *mut i16 as *mut u8, buf.len() * 2);
-            let output_buffer: &mut OutputBuffer = mem::transmute(G_OUTPUT_BUFFER.unwrap());
-            let play_offset = output_buffer.play_offset;
-            let output_buffer_len = output_buffer.samples.len();
-
-            for i in 0..samples.len() {
-                if i + play_offset >= output_buffer_len {
-                    break;
-                }
-                samples[i] = output_buffer.samples[i + play_offset];
+    type Channel = f32;
+    fn callback(&mut self, out: &mut [f32]) {
+        if self.samples.len() < out.len() {
+            // Zero out the buffer to avoid damaging the listener's eardrums.
+            for value in out.iter_mut() {
+                *value = 0.0
             }
-
-            let _ = AUDIO_MUTEX.lock();
-            output_buffer.play_offset = cmp::min(play_offset + samples.len(), output_buffer_len);
-            AUDIO_CONDVAR.notify_one();
         }
+
+        let mut leftovers = Vec::new();
+        for (i, sample) in mem::replace(&mut self.samples, Vec::new()).into_iter().enumerate() {
+            if i < out.len() {
+                out[i] = sample
+            } else {
+                leftovers.push(sample);
+            }
+        }
+        self.samples = leftovers
     }
 }
 
 /// Audio initialization. If successful, returns a pointer to an allocated `OutputBuffer` that can
 /// be filled with raw audio data.
 pub fn open() -> Option<*mut OutputBuffer> {
+    let sdl_context = sdl2::init().unwrap();
+    let sdl_audio = sdl_context.audio().unwrap();
+
     let output_buffer = Box::new(OutputBuffer {
         samples: [ 0; SAMPLE_COUNT ],
         play_offset: 0,
@@ -75,25 +80,20 @@ pub fn open() -> Option<*mut OutputBuffer> {
         mem::forget(output_buffer);
     }
 
-    let spec = AudioSpecDesired {
+    let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),
         samples: Some(4410),
     };
 
-    unsafe {
-        match AudioDevice::open_playback(None, spec, |_| NesAudioCallback) {
-            Ok(device) => {
-                device.resume();
-                G_AUDIO_DEVICE = Some(mem::transmute(Box::new(device)));
-                return Some(output_buffer_ptr)
-            },
-            Err(e) => {
-                println!("Error initializing AudioDevice: {}", e);
-                return None
-            }
-        }
-    }
+    let device = sdl_audio.open_playback(None, &desired_spec, |spec| NesAudioCallback {
+        samples: Vec::new(),
+        spec: spec,
+    }).unwrap();
+
+    device.resume();
+    G_AUDIO_DEVICE = Some(mem::transmute(Box::new(device)));
+    return Some(output_buffer_ptr);
 }
 
 //
