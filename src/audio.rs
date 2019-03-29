@@ -8,6 +8,7 @@
 // safe.
 
 use sdl2::audio::{AudioDevice, AudioCallback, AudioSpecDesired, AudioDeviceLockGuard};
+use sdl2::Sdl;
 use std::cmp;
 use std::mem;
 use std::slice::from_raw_parts_mut;
@@ -61,7 +62,7 @@ impl AudioCallback for NesAudioCallback {
 
 /// Audio initialization. If successful, returns a pointer to an allocated `OutputBuffer` that can
 /// be filled with raw audio data.
-pub fn open() -> Option<*mut OutputBuffer> {
+pub fn open(sdl: &Sdl) -> Option<*mut OutputBuffer> {
     let output_buffer = Box::new(OutputBuffer {
         samples: [ 0; SAMPLE_COUNT ],
         play_offset: 0,
@@ -81,16 +82,17 @@ pub fn open() -> Option<*mut OutputBuffer> {
         samples: Some(4410),
     };
 
+    let audio_subsystem = sdl.audio().unwrap();
     unsafe {
-        match AudioDevice::open_playback(None, spec, |_| NesAudioCallback) {
+        match audio_subsystem.open_playback(None, &spec, |_| NesAudioCallback) {
             Ok(device) => {
                 device.resume();
                 G_AUDIO_DEVICE = Some(mem::transmute(Box::new(device)));
-                return Some(output_buffer_ptr)
-            },
+                return Some(output_buffer_ptr);
+            }
             Err(e) => {
                 println!("Error initializing AudioDevice: {}", e);
-                return None
+                return None;
             }
         }
     }
